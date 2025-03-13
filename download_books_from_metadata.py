@@ -4,7 +4,8 @@ Unlike the original Standard Project Gutenberg Corpus, this script is platform a
 it does not use rsync to download.  It's janky, but it works (I hope).
 """
 
-import os, sys
+import os
+import sys
 from urllib.request import urlopen
 import argparse
 import pickle
@@ -14,12 +15,12 @@ import pandas as pd
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-from gutenberg.src.metadataparser import make_df_metadata
-from gutenberg.src.bookshelves import get_bookshelves
+# from gutenberg.src.metadataparser import make_df_metadata
+# from gutenberg.src.bookshelves import get_bookshelves
 from gutenberg.src.bookshelves import parse_bookshelves
 
 
-def download_from_metadata(metadata_file: str, raw_outpath: str):
+def download_from_metadata(metadata_file: str, raw_outpath: str, skip_existing: bool = True):
     """Downloads books' raw text files from Project Gutenberg based on metadata file
     Args:
         metadata_file (str): Path to metadata csv
@@ -38,7 +39,7 @@ def download_from_metadata(metadata_file: str, raw_outpath: str):
         raise ValueError('No valid ID column found in metadata file')
 
     for book_id in book_list:
-        download_book(book_id, raw_outpath)
+        download_book(book_id, raw_outpath, skip_existing)
 
 
 def download_url(urlpath: str):
@@ -50,18 +51,16 @@ def download_url(urlpath: str):
     Returns:
         _type_: _description_
     """
-    try:
-        # open a connection to the server
-        with urlopen(urlpath, timeout=3) as connection:
-            # read the contents of the html doc
-            return connection.read()
-    except:
-        # TODO: Make this specific
-        # bad url, socket timeout, http forbidden, etc.
-        return None
+    # open a connection to the server
+    with urlopen(urlpath, timeout=3) as connection:
+        # read the contents of the html doc
+        return connection.read()
+    # Might need a try except here in the future
+    # bad url, socket timeout, http forbidden, etc.
+    # return None
 
 
-def download_book(book_id: int, save_path: str):
+def download_book(book_id: int, save_path: str, skip_existing: bool = True):
     """Downloads a book from Project Gutenberg based on its ID
 
     Saves the book as PG{book_id}_raw.txt in the save_path folder,
@@ -78,13 +77,16 @@ def download_book(book_id: int, save_path: str):
     """
     print(book_id)
     # construct the download url
+    save_file = os.path.join(save_path, f'PG{book_id}_raw.txt')
+    if os.path.exists(save_file) and skip_existing:
+        return f'Skipping {save_file}, already exists'
     url = f'https://www.gutenberg.org/files/{book_id}/{book_id}-0.txt'
     # download the content
     data = download_url(url)
     if data is None:
         return f'Failed to download {url}'
     # create local path
-    save_file = os.path.join(save_path, f'PG{book_id}_raw.txt')
+
     # save book to file
     with open(save_file, 'wb') as file:
         file.write(data)
@@ -98,13 +100,13 @@ if __name__ == '__main__':
 
     parser.add_argument('--metadata', required=True, help='Path to the metadata CSV file')
     parser.add_argument('--outpath', default='dataset', help='Path to gutenberg data folder')
-    parser.add_argument('--skip_existing', default=False, help='Should existing books be skipped')
+    parser.add_argument('--skip_existing', default=True, help='Should existing books be skipped')
     args = parser.parse_args()
 
-    raw_outpath = os.path.join(args.outpath, 'raw')
-    os.makedirs(raw_outpath, exist_ok=True)
+    raw_text_fold = os.path.join(args.outpath, 'raw')
+    os.makedirs(raw_text_fold, exist_ok=True)
 
-    download_from_metadata(args.metadata, raw_outpath)
+    download_from_metadata(args.metadata, raw_text_fold, args.skip_existing)
 
     metadata_fold = os.path.join(args.outpath, 'metadata')
     os.makedirs(metadata_fold, exist_ok=True)
