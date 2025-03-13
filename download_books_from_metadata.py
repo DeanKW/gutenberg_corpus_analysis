@@ -6,10 +6,13 @@ it does not use rsync to download.  It's janky, but it works (I hope).
 
 import os
 import sys
+import urllib
 from urllib.request import urlopen
 import argparse
 import pickle
+import http
 
+import tqdm
 import pandas as pd
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -33,12 +36,12 @@ def download_from_metadata(metadata_file: str, raw_outpath: str, skip_existing: 
     if 'id' in df.columns:
         df['id'] = df['id'].str[2:]
         book_list = df['id'].tolist()
-    if 'Text#' in df.columns:
+    elif 'Text#' in df.columns:
         book_list = df['Text#'].tolist()
     else:
         raise ValueError('No valid ID column found in metadata file')
 
-    for book_id in book_list:
+    for _, book_id in tqdm.tqdm(enumerate(book_list)):
         download_book(book_id, raw_outpath, skip_existing)
 
 
@@ -52,9 +55,13 @@ def download_url(urlpath: str):
         _type_: _description_
     """
     # open a connection to the server
-    with urlopen(urlpath, timeout=3) as connection:
-        # read the contents of the html doc
-        return connection.read()
+    try:
+        with urlopen(urlpath, timeout=3) as connection:
+            # read the contents of the html doc
+            return connection.read()
+    except http.client.InvalidURL as e:
+        print(f'Invalid URL: {urlpath}')
+
     # Might need a try except here in the future
     # bad url, socket timeout, http forbidden, etc.
     # return None
@@ -75,15 +82,25 @@ def download_book(book_id: int, save_path: str, skip_existing: bool = True):
     Returns:
         str: Description of success or failure
     """
-    print(book_id)
     # construct the download url
     save_file = os.path.join(save_path, f'PG{book_id}_raw.txt')
     if os.path.exists(save_file) and skip_existing:
         return f'Skipping {save_file}, already exists'
     url = f'https://www.gutenberg.org/files/{book_id}/{book_id}-0.txt'
     # download the content
-    data = download_url(url)
+    data=None
+    try:
+        data = download_url(url)
+    except urllib.error.HTTPError as e:
+        url = f'https://www.gutenberg.org/files/{book_id}/{book_id}-8.txt'
+        try:
+            data = download_url(url)
+        except urllib.error.HTTPError as e:
+            print(f'{book_id}/{book_id}-8.txt didnt exist')
+        #print(f'{book_id}/{book_id}-0.txt didnt exist, but {book_id}/{book_id}-8.txt did ')
+        #print(f'HTTP Error: {e.code} {e.reason}')
     if data is None:
+        print(f'Failed to download {url}')
         return f'Failed to download {url}'
     # create local path
 
