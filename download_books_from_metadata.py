@@ -60,7 +60,7 @@ def download_url(urlpath: str):
             # read the contents of the html doc
             return connection.read()
     except http.client.InvalidURL as e:
-        print(f'Invalid URL: {urlpath}')
+        print(f'Invalid URL {e}: {urlpath}')
 
     # Might need a try except here in the future
     # bad url, socket timeout, http forbidden, etc.
